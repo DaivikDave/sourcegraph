@@ -268,12 +268,14 @@ func writeData(ctx context.Context, lsifStore LSIFStore, id int, groupedBundleDa
 	if err := tx.WriteResultChunks(ctx, id, groupedBundleData.ResultChunks); err != nil {
 		return errors.Wrap(err, "store.WriteResultChunks")
 	}
-	// TODO figure out how to prevent implementation monikers from being stored in lsif_data_definitions
 	if err := tx.WriteDefinitions(ctx, id, groupedBundleData.Definitions); err != nil {
 		return errors.Wrap(err, "store.WriteDefinitions")
 	}
 	if err := tx.WriteReferences(ctx, id, groupedBundleData.References); err != nil {
 		return errors.Wrap(err, "store.WriteReferences")
+	}
+	if err := tx.WriteImplementations(ctx, id, groupedBundleData.Implementations); err != nil {
+		return errors.Wrap(err, "store.WriteImplementations")
 	}
 	if err := tx.WriteDocumentationPages(ctx, id, groupedBundleData.DocumentationPages); err != nil {
 		return errors.Wrap(err, "store.WriteDocumentationPages")
