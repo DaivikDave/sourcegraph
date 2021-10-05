@@ -3,6 +3,8 @@ package protocol
 import (
 	"time"
 
+	"github.com/sourcegraph/sourcegraph/internal/gitserver/domain"
+
 	"github.com/cockroachdb/errors"
 
 	"github.com/sourcegraph/sourcegraph/internal/api"
@@ -321,4 +323,13 @@ type CreateCommitFromPatchError struct {
 // Error returns a detailed error conforming to the error interface
 func (e *CreateCommitFromPatchError) Error() string {
 	return e.InternalError
+}
+
+type GetObjectRequest struct {
+	Repo       api.RepoName
+	ObjectName string
+}
+
+type GetObjectResponse struct {
+	Object domain.GitObject
 }
