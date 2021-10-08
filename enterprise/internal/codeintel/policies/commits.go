@@ -64,7 +64,7 @@ func CommitsDescribedByPolicy(
 					commitMap[commit] = append(commitMap[commit], refDescription.Name)
 				}
 
-				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, func(policy dbstore.ConfigurationPolicy) {
+				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTree, patterns, func(policy dbstore.ConfigurationPolicy) {
 					commitMap[commit] = append(commitMap[commit], refDescription.Name)
 
 					if maxAge, includeIntermediateCommits := extractor(policy); includeIntermediateCommits {

@@ -321,7 +321,7 @@ extend type Repository {
         A pattern matching the name of the matching Git object.
         """
         pattern: String!
-    ): [String!]!
+    ): [GitObjectFilterPreview!]!
 }
 
 extend interface TreeEntry {
@@ -359,6 +359,21 @@ extend type GitBlob {
         """
         toolName: String
     ): GitBlobLSIFData
+}
+
+"""
+TODO - document
+"""
+type GitObjectFilterPreview {
+    """
+    TODO - document
+    """
+    name: String!
+
+    """
+    TODO - document
+    """
+    rev: String!
 }
 
 """
