@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/gitserver"
+	"github.com/sourcegraph/sourcegraph/enterprise/cmd/worker/internal/codeintel/policies"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
 	"github.com/sourcegraph/sourcegraph/internal/database/basestore"
 )
@@ -49,6 +49,5 @@ type LSIFStore interface {
 }
 
 type GitserverClient interface {
-	RefDescriptions(ctx context.Context, repositoryID int) (map[string][]gitserver.RefDescription, error)
-	BranchesContaining(ctx context.Context, repositoryID int, commit string) ([]string, error)
+	policies.GitserverClient
 }

@@ -56,6 +56,10 @@ func CommitsDescribedByPolicy(ctx context.Context, gitserverClient GitserverClie
 		for _, refDescription := range refDescriptions {
 			switch refDescription.Type {
 			case gitserver.RefTypeBranch:
+				if refDescription.IsDefaultBranch {
+					// TODO - conditionally always mark the tip here
+				}
+
 				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, func(policy dbstore.ConfigurationPolicy) {
 					commitMap[commit] = struct{}{}
 

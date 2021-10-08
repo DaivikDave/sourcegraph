@@ -77,6 +77,7 @@ func (s *IndexScheduler) Handle(ctx context.Context) error {
 		return nil
 	}
 
+	// Get shared policies that apply over all repositories
 	globalPolicies, err := s.dbStore.GetConfigurationPolicies(ctx, dbstore.GetConfigurationPoliciesOptions{
 		ForIndexing: true,
 	})
@@ -86,6 +87,7 @@ func (s *IndexScheduler) Handle(ctx context.Context) error {
 
 	var queueErr error
 	for _, repositoryID := range repositories {
+		// Get repository-specific policies that apply only to this repository
 		repositoryPolicies, err := s.dbStore.GetConfigurationPolicies(ctx, dbstore.GetConfigurationPoliciesOptions{
 			RepositoryID: repositoryID,
 			ForIndexing:  true,
@@ -122,5 +124,5 @@ func (s *IndexScheduler) Handle(ctx context.Context) error {
 }
 
 func (s *IndexScheduler) HandleError(err error) {
-	log15.Error("Failed to update indexable repositories", "err", err)
+	log15.Error("Failed to schedule index jobs", "err", err)
 }

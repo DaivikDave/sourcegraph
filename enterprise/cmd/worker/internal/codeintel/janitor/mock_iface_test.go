@@ -2000,9 +2000,9 @@ func (c DBStoreUpdateUploadRetentionFuncCall) Results() []interface{} {
 // github.com/sourcegraph/sourcegraph/enterprise/cmd/worker/internal/codeintel/janitor)
 // used for unit testing.
 type MockGitserverClient struct {
-	// BranchesContainingFunc is an instance of a mock function object
-	// controlling the behavior of the method BranchesContaining.
-	BranchesContainingFunc *GitserverClientBranchesContainingFunc
+	// CommitsUniqueToBranchFunc is an instance of a mock function object
+	// controlling the behavior of the method CommitsUniqueToBranch.
+	CommitsUniqueToBranchFunc *GitserverClientCommitsUniqueToBranchFunc
 	// RefDescriptionsFunc is an instance of a mock function object
 	// controlling the behavior of the method RefDescriptions.
 	RefDescriptionsFunc *GitserverClientRefDescriptionsFunc
@@ -2013,8 +2013,8 @@ type MockGitserverClient struct {
 // overwritten.
 func NewMockGitserverClient() *MockGitserverClient {
 	return &MockGitserverClient{
-		BranchesContainingFunc: &GitserverClientBranchesContainingFunc{
-			defaultHook: func(context.Context, int, string) ([]string, error) {
+		CommitsUniqueToBranchFunc: &GitserverClientCommitsUniqueToBranchFunc{
+			defaultHook: func(context.Context, int, string, bool, *time.Time) ([]string, error) {
 				return nil, nil
 			},
 		},
@@ -2031,8 +2031,8 @@ func NewMockGitserverClient() *MockGitserverClient {
 // overwritten.
 func NewMockGitserverClientFrom(i GitserverClient) *MockGitserverClient {
 	return &MockGitserverClient{
-		BranchesContainingFunc: &GitserverClientBranchesContainingFunc{
-			defaultHook: i.BranchesContaining,
+		CommitsUniqueToBranchFunc: &GitserverClientCommitsUniqueToBranchFunc{
+			defaultHook: i.CommitsUniqueToBranch,
 		},
 		RefDescriptionsFunc: &GitserverClientRefDescriptionsFunc{
 			defaultHook: i.RefDescriptions,
@@ -2040,37 +2040,37 @@ func NewMockGitserverClientFrom(i GitserverClient) *MockGitserverClient {
 	}
 }
 
-// GitserverClientBranchesContainingFunc describes the behavior when the
-// BranchesContaining method of the parent MockGitserverClient instance is
-// invoked.
-type GitserverClientBranchesContainingFunc struct {
-	defaultHook func(context.Context, int, string) ([]string, error)
-	hooks       []func(context.Context, int, string) ([]string, error)
-	history     []GitserverClientBranchesContainingFuncCall
+// GitserverClientCommitsUniqueToBranchFunc describes the behavior when the
+// CommitsUniqueToBranch method of the parent MockGitserverClient instance
+// is invoked.
+type GitserverClientCommitsUniqueToBranchFunc struct {
+	defaultHook func(context.Context, int, string, bool, *time.Time) ([]string, error)
+	hooks       []func(context.Context, int, string, bool, *time.Time) ([]string, error)
+	history     []GitserverClientCommitsUniqueToBranchFuncCall
 	mutex       sync.Mutex
 }
 
-// BranchesContaining delegates to the next hook function in the queue and
-// stores the parameter and result values of this invocation.
-func (m *MockGitserverClient) BranchesContaining(v0 context.Context, v1 int, v2 string) ([]string, error) {
-	r0, r1 := m.BranchesContainingFunc.nextHook()(v0, v1, v2)
-	m.BranchesContainingFunc.appendCall(GitserverClientBranchesContainingFuncCall{v0, v1, v2, r0, r1})
+// CommitsUniqueToBranch delegates to the next hook function in the queue
+// and stores the parameter and result values of this invocation.
+func (m *MockGitserverClient) CommitsUniqueToBranch(v0 context.Context, v1 int, v2 string, v3 bool, v4 *time.Time) ([]string, error) {
+	r0, r1 := m.CommitsUniqueToBranchFunc.nextHook()(v0, v1, v2, v3, v4)
+	m.CommitsUniqueToBranchFunc.appendCall(GitserverClientCommitsUniqueToBranchFuncCall{v0, v1, v2, v3, v4, r0, r1})
 	return r0, r1
 }
 
-// SetDefaultHook sets function that is called when the BranchesContaining
-// method of the parent MockGitserverClient instance is invoked and the hook
-// queue is empty.
-func (f *GitserverClientBranchesContainingFunc) SetDefaultHook(hook func(context.Context, int, string) ([]string, error)) {
+// SetDefaultHook sets function that is called when the
+// CommitsUniqueToBranch method of the parent MockGitserverClient instance
+// is invoked and the hook queue is empty.
+func (f *GitserverClientCommitsUniqueToBranchFunc) SetDefaultHook(hook func(context.Context, int, string, bool, *time.Time) ([]string, error)) {
 	f.defaultHook = hook
 }
 
 // PushHook adds a function to the end of hook queue. Each invocation of the
-// BranchesContaining method of the parent MockGitserverClient instance
+// CommitsUniqueToBranch method of the parent MockGitserverClient instance
 // invokes the hook at the front of the queue and discards it. After the
 // queue is empty, the default hook function is invoked for any future
 // action.
-func (f *GitserverClientBranchesContainingFunc) PushHook(hook func(context.Context, int, string) ([]string, error)) {
+func (f *GitserverClientCommitsUniqueToBranchFunc) PushHook(hook func(context.Context, int, string, bool, *time.Time) ([]string, error)) {
 	f.mutex.Lock()
 	f.hooks = append(f.hooks, hook)
 	f.mutex.Unlock()
@@ -2078,21 +2078,21 @@ func (f *GitserverClientBranchesContainingFunc) PushHook(hook func(context.Conte
 
 // SetDefaultReturn calls SetDefaultDefaultHook with a function that returns
 // the given values.
-func (f *GitserverClientBranchesContainingFunc) SetDefaultReturn(r0 []string, r1 error) {
-	f.SetDefaultHook(func(context.Context, int, string) ([]string, error) {
+func (f *GitserverClientCommitsUniqueToBranchFunc) SetDefaultReturn(r0 []string, r1 error) {
+	f.SetDefaultHook(func(context.Context, int, string, bool, *time.Time) ([]string, error) {
 		return r0, r1
 	})
 }
 
 // PushReturn calls PushDefaultHook with a function that returns the given
 // values.
-func (f *GitserverClientBranchesContainingFunc) PushReturn(r0 []string, r1 error) {
-	f.PushHook(func(context.Context, int, string) ([]string, error) {
+func (f *GitserverClientCommitsUniqueToBranchFunc) PushReturn(r0 []string, r1 error) {
+	f.PushHook(func(context.Context, int, string, bool, *time.Time) ([]string, error) {
 		return r0, r1
 	})
 }
 
-func (f *GitserverClientBranchesContainingFunc) nextHook() func(context.Context, int, string) ([]string, error) {
+func (f *GitserverClientCommitsUniqueToBranchFunc) nextHook() func(context.Context, int, string, bool, *time.Time) ([]string, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
@@ -2105,27 +2105,28 @@ func (f *GitserverClientBranchesContainingFunc) nextHook() func(context.Context,
 	return hook
 }
 
-func (f *GitserverClientBranchesContainingFunc) appendCall(r0 GitserverClientBranchesContainingFuncCall) {
+func (f *GitserverClientCommitsUniqueToBranchFunc) appendCall(r0 GitserverClientCommitsUniqueToBranchFuncCall) {
 	f.mutex.Lock()
 	f.history = append(f.history, r0)
 	f.mutex.Unlock()
 }
 
-// History returns a sequence of GitserverClientBranchesContainingFuncCall
-// objects describing the invocations of this function.
-func (f *GitserverClientBranchesContainingFunc) History() []GitserverClientBranchesContainingFuncCall {
+// History returns a sequence of
+// GitserverClientCommitsUniqueToBranchFuncCall objects describing the
+// invocations of this function.
+func (f *GitserverClientCommitsUniqueToBranchFunc) History() []GitserverClientCommitsUniqueToBranchFuncCall {
 	f.mutex.Lock()
-	history := make([]GitserverClientBranchesContainingFuncCall, len(f.history))
+	history := make([]GitserverClientCommitsUniqueToBranchFuncCall, len(f.history))
 	copy(history, f.history)
 	f.mutex.Unlock()
 
 	return history
 }
 
-// GitserverClientBranchesContainingFuncCall is an object that describes an
-// invocation of method BranchesContaining on an instance of
+// GitserverClientCommitsUniqueToBranchFuncCall is an object that describes
+// an invocation of method CommitsUniqueToBranch on an instance of
 // MockGitserverClient.
-type GitserverClientBranchesContainingFuncCall struct {
+type GitserverClientCommitsUniqueToBranchFuncCall struct {
 	// Arg0 is the value of the 1st argument passed to this method
 	// invocation.
 	Arg0 context.Context
@@ -2135,6 +2136,12 @@ type GitserverClientBranchesContainingFuncCall struct {
 	// Arg2 is the value of the 3rd argument passed to this method
 	// invocation.
 	Arg2 string
+	// Arg3 is the value of the 4th argument passed to this method
+	// invocation.
+	Arg3 bool
+	// Arg4 is the value of the 5th argument passed to this method
+	// invocation.
+	Arg4 *time.Time
 	// Result0 is the value of the 1st result returned from this method
 	// invocation.
 	Result0 []string
@@ -2145,13 +2152,13 @@ type GitserverClientBranchesContainingFuncCall struct {
 
 // Args returns an interface slice containing the arguments of this
 // invocation.
-func (c GitserverClientBranchesContainingFuncCall) Args() []interface{} {
-	return []interface{}{c.Arg0, c.Arg1, c.Arg2}
+func (c GitserverClientCommitsUniqueToBranchFuncCall) Args() []interface{} {
+	return []interface{}{c.Arg0, c.Arg1, c.Arg2, c.Arg3, c.Arg4}
 }
 
 // Results returns an interface slice containing the results of this
 // invocation.
-func (c GitserverClientBranchesContainingFuncCall) Results() []interface{} {
+func (c GitserverClientCommitsUniqueToBranchFuncCall) Results() []interface{} {
 	return []interface{}{c.Result0, c.Result1}
 }
 
