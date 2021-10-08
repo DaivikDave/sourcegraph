@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/inconshreveable/log15"
 
-	"github.com/sourcegraph/sourcegraph/enterprise/cmd/worker/internal/codeintel/policies"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/policies"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/gitserver"
@@ -97,12 +97,12 @@ func (s *IndexScheduler) Handle(ctx context.Context) error {
 		}
 
 		// Determine the set of commits that should be reliably indexed for this repository
-		commits, err := policies.CommitsDescribedByPolicy(ctx, s.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...))
+		commitMap, err := policies.CommitsDescribedByPolicy(ctx, s.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...), false)
 		if err != nil {
-			return errors.Wrap(err, "policies.JustCompileEverything")
+			return errors.Wrap(err, "policies.CommitsDescribedByPolicy")
 		}
 
-		for _, commit := range commits {
+		for commit := range commitMap {
 			if _, err := s.indexEnqueuer.QueueIndexes(ctx, repositoryID, commit, "", false); err != nil {
 				if errors.HasType(err, &gitserver.RevisionNotFoundError{}) {
 					continue

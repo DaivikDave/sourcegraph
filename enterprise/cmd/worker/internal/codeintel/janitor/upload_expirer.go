@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/inconshreveable/log15"
 
-	"github.com/sourcegraph/sourcegraph/enterprise/cmd/worker/internal/codeintel/policies"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/policies"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
 	"github.com/sourcegraph/sourcegraph/internal/goroutine"
 	"github.com/sourcegraph/sourcegraph/internal/timeutil"
@@ -126,14 +126,9 @@ func (e *uploadExpirer) handleRepository(
 	// Combine global and repository-specific policies. Note that this resulting slice should never be
 	// empty as we have a pair of protected data retention policies on the global scope so that all data
 	// visible from a tag or branch tip is protected for at least a short amount of time after upload.
-	commits, err := policies.CommitsDescribedByPolicy(ctx, e.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...))
+	commitMap, err := policies.CommitsDescribedByPolicy(ctx, e.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...), true)
 	if err != nil {
 		return errors.Wrap(err, "policies.CommitsDescribedByPolicy")
-	}
-
-	commitMap := make(map[string]struct{}, len(commits))
-	for _, commit := range commits {
-		commitMap[commit] = struct{}{}
 	}
 
 	// Mark the time after which all unprocessed uploads for this repository will not be touched.
@@ -175,7 +170,7 @@ func (e *uploadExpirer) handleRepository(
 
 func (e *uploadExpirer) handleUploads(
 	ctx context.Context,
-	commitMap map[string]struct{},
+	commitMap map[string][]string,
 	uploads []dbstore.Upload,
 	now time.Time,
 ) (err error) {
@@ -225,7 +220,7 @@ func (e *uploadExpirer) handleUploads(
 
 func (e *uploadExpirer) isUploadProtectedByPolicy(
 	ctx context.Context,
-	commitMap map[string]struct{},
+	commitMap map[string][]string,
 	upload dbstore.Upload,
 	now time.Time,
 ) (bool, error) {

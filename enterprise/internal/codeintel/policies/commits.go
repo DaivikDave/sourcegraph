@@ -3,15 +3,14 @@ package policies
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gobwas/glob"
-	"github.com/inconshreveable/log15"
 
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/gitserver"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
+	"github.com/sourcegraph/sourcegraph/internal/errcode"
 )
 
 // TODO  - rename, document, export
@@ -30,8 +29,13 @@ type SR struct {
 }
 
 // TODO - document
-// TODO - rewrite upload expirer to use this
-func CommitsDescribedByPolicy(ctx context.Context, gitserverClient GitserverClient, repositoryID int, policies []dbstore.ConfigurationPolicy) ([]string, error) {
+func CommitsDescribedByPolicy(
+	ctx context.Context,
+	gitserverClient GitserverClient,
+	repositoryID int,
+	policies []dbstore.ConfigurationPolicy,
+	includeTipOfDefaultBranch bool,
+) (map[string][]string, error) {
 	if len(policies) == 0 {
 		return nil, nil
 	}
@@ -49,31 +53,28 @@ func CommitsDescribedByPolicy(ctx context.Context, gitserverClient GitserverClie
 		return nil, err
 	}
 
-	commitMap := map[string]struct{}{}
+	commitMap := map[string][]string{}
 	branchRequests := map[string]SR{}
 
 	for commit, refDescriptions := range refDescriptions {
 		for _, refDescription := range refDescriptions {
 			switch refDescription.Type {
 			case gitserver.RefTypeBranch:
-				if refDescription.IsDefaultBranch {
-					// TODO - conditionally always mark the tip here
+				if refDescription.IsDefaultBranch && includeTipOfDefaultBranch {
+					commitMap[commit] = append(commitMap[commit], refDescription.Name)
 				}
 
 				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, func(policy dbstore.ConfigurationPolicy) {
-					commitMap[commit] = struct{}{}
+					commitMap[commit] = append(commitMap[commit], refDescription.Name)
 
-					maxAge, includeIntermediateCommits := extractor(policy)
-					if !includeIntermediateCommits {
-						return
+					if maxAge, includeIntermediateCommits := extractor(policy); includeIntermediateCommits {
+						branchRequests[refDescription.Name] = foldRefDescription(branchRequests[refDescription.Name], refDescription, maxAge)
 					}
-
-					branchRequests[refDescription.Name] = foldRefDescription(branchRequests[refDescription.Name], refDescription, maxAge)
 				})
 
 			case gitserver.RefTypeTag:
 				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, func(policy dbstore.ConfigurationPolicy) {
-					commitMap[commit] = struct{}{}
+					commitMap[commit] = append(commitMap[commit], refDescription.Name)
 				})
 			}
 		}
@@ -92,24 +93,26 @@ func CommitsDescribedByPolicy(ctx context.Context, gitserverClient GitserverClie
 		}
 
 		for _, commit := range commits {
-			commitMap[commit] = struct{}{}
+			commitMap[commit] = append(commitMap[commit], branchName)
 		}
 	}
 
 	for _, policy := range policies {
 		if policy.Type == dbstore.GitObjectTypeCommit {
-			// TODO - not sure how to incorporate this
-			log15.Warn(fmt.Sprintf("WTF DO I DO WITH: %v\n", policy))
+			commit, err := gitserverClient.ResolveRevision(ctx, repositoryID, policy.Pattern)
+			if err != nil {
+				if errcode.IsNotFound(err) {
+					continue
+				}
+
+				return nil, errors.Wrap(err, "gitserver.ResolveRevision")
+			}
+
+			commitMap[string(commit)] = append(commitMap[string(commit)], policy.Pattern)
 		}
 	}
 
-	commits := make([]string, 0, len(commitMap))
-	for commit := range commitMap {
-		commits = append(commits, commit)
-	}
-	sort.Strings(commits)
-
-	return commits, nil
+	return commitMap, nil
 }
 
 // compilePatterns constructs a map from patterns in each given policy to a compiled glob object used
@@ -119,7 +122,7 @@ func compilePatterns(policies []dbstore.ConfigurationPolicy) (map[string]glob.Gl
 	patterns := make(map[string]glob.Glob, len(policies))
 
 	for _, policy := range policies {
-		if _, ok := patterns[policy.Pattern]; ok {
+		if _, ok := patterns[policy.Pattern]; ok || policy.Type == dbstore.GitObjectTypeCommit {
 			continue
 		}
 
