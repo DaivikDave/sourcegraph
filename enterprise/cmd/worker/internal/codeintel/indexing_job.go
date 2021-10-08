@@ -2,6 +2,7 @@ package codeintel
 
 import (
 	"context"
+	"time"
 
 	"github.com/inconshreveable/log15"
 	"github.com/opentracing/opentracing-go"
@@ -68,9 +69,6 @@ func (j *indexingJob) Routines(ctx context.Context) ([]goroutine.BackgroundRouti
 	syncMetrics := workerutil.NewMetrics(observationContext, "codeintel_dependency_index_processor", nil)
 	queueingMetrics := workerutil.NewMetrics(observationContext, "codeintel_dependency_index_queueing", nil)
 
-	settingStore := database.Settings(db)
-	repoStore := database.Repos(db)
-
 	prometheus.DefaultRegisterer.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "src_codeintel_dependency_index_total",
 		Help: "Total number of jobs in the queued state.",
@@ -84,7 +82,7 @@ func (j *indexingJob) Routines(ctx context.Context) ([]goroutine.BackgroundRouti
 	}))
 
 	routines := []goroutine.BackgroundRoutine{
-		indexing.NewIndexScheduler(dbStoreShim, settingStore, repoStore, indexEnqueuer, indexingConfigInst.AutoIndexingTaskInterval, observationContext),
+		indexing.NewIndexScheduler(dbStoreShim, gitserverClient, indexEnqueuer, time.Second, 100, indexingConfigInst.AutoIndexingTaskInterval, observationContext), // TODO - real values
 		indexing.NewDependencySyncScheduler(dbStoreShim, dependencySyncStore, extSvcStore, syncMetrics),
 		indexing.NewDependencyIndexingScheduler(dbStoreShim, dependencyIndexingStore, extSvcStore, repoupdater.DefaultClient, gitserverClient, indexEnqueuer, indexingConfigInst.DependencyIndexerSchedulerPollInterval, indexingConfigInst.DependencyIndexerSchedulerConcurrency, queueingMetrics),
 	}

@@ -716,6 +716,26 @@ const hardDeleteUploadByIDQuery = `
 DELETE FROM lsif_uploads WHERE id IN (%s)
 `
 
+// TODO - document
+func (s *Store) SelectRepositoriesForIndexScan(ctx context.Context, processDelay time.Duration, limit int) (_ []int, err error) {
+	// TODO - observe
+
+	return basestore.ScanInts(s.Query(ctx, sqlf.Sprintf(
+		selectRepositoriesForIndexScanQuery,
+		// now,
+		// int(processDelay/time.Second),
+		limit,
+		// now,
+		// now,
+	)))
+}
+
+// TODO - rate limit
+const selectRepositoriesForIndexScanQuery = `
+-- source: enterprise/internal/codeintel/stores/dbstore/uploads.go:SelectRepositoriesForIndexScan
+SELECT DISTINCT id FROM repo WHERE deleted_at IS NULL ORDER BY id LIMIT %s
+`
+
 // SelectRepositoriesForRetentionScan returns a set of repository identifiers with live code intelligence
 // data and a fresh associated commit graph. Repositories that were returned previously from this call
 // within the  given process delay are not returned.

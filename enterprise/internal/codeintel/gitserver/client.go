@@ -296,6 +296,36 @@ func parseRefDescriptions(lines []string) (map[string][]RefDescription, error) {
 	return refDescriptions, nil
 }
 
+// CommitsUniqueToBranch returns the commits that exist on a particular branch in the given repository. This set
+// of commits is determined by listing `{branchName} ^HEAD`, which is interpreted as: all commits on {branchName}
+// not also on the tip of the default branch. If the supplied branch name is the default branch, then this method
+// instead returns all commits reachable from HEAD.
+func (c *Client) CommitsUniqueToBranch(ctx context.Context, repositoryID int, branchName string, isDefaultBranch bool, maxAge *time.Time) (_ []string, err error) {
+	ctx, endObservation := c.operations.commitsUniqueToBranch.With(ctx, &err, observation.Args{LogFields: []log.Field{
+		log.Int("repositoryID", repositoryID),
+		log.String("branchName", branchName),
+		log.Bool("isDefaultBranch", isDefaultBranch),
+	}})
+	defer endObservation(1, observation.Args{})
+
+	args := []string{"rev-list"}
+	if maxAge != nil {
+		args = append(args, fmt.Sprintf("--max-age=%s", *maxAge))
+	}
+	if isDefaultBranch {
+		args = append(args, "HEAD")
+	} else {
+		args = append(args, branchName, "^HEAD")
+	}
+
+	out, err := c.execGitCommand(ctx, repositoryID, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return strings.Split(out, "\n"), nil
+}
+
 // BranchesContaining returns a map from branch names to branch tip hashes for each brach
 // containing the given commit.
 func (c *Client) BranchesContaining(ctx context.Context, repositoryID int, commit string) ([]string, error) {

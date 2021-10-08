@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/sourcegraph/sourcegraph/enterprise/cmd/worker/internal/codeintel/policies"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/database"
@@ -18,13 +19,15 @@ import (
 
 type DBStore interface {
 	With(other basestore.ShareableStore) DBStore
-	GetRepositoriesWithIndexConfiguration(ctx context.Context) ([]int, error)
-	GetAutoindexDisabledRepositories(ctx context.Context) ([]int, error)
+	GetRepositoriesWithIndexConfiguration(ctx context.Context) ([]int, error) // TODO - remove
+	GetAutoindexDisabledRepositories(ctx context.Context) ([]int, error)      // TODO - remove
 	GetUploads(ctx context.Context, opts dbstore.GetUploadsOptions) ([]dbstore.Upload, int, error)
 	GetUploadByID(ctx context.Context, id int) (dbstore.Upload, bool, error)
 	ReferencesForUpload(ctx context.Context, uploadID int) (dbstore.PackageReferenceScanner, error)
 	InsertCloneableDependencyRepo(ctx context.Context, dependency precise.Package) (bool, error)
 	InsertDependencyIndexingJob(ctx context.Context, uploadID int, externalServiceKind string, syncTime time.Time) (int, error)
+	GetConfigurationPolicies(ctx context.Context, opts dbstore.GetConfigurationPoliciesOptions) ([]dbstore.ConfigurationPolicy, error)
+	SelectRepositoriesForIndexScan(ctx context.Context, processDelay time.Duration, limit int) ([]int, error)
 }
 
 type DBStoreShim struct {
@@ -54,6 +57,8 @@ type ExternalServiceStore interface {
 }
 
 type GitserverClient interface {
+	policies.GitserverClient
+
 	Head(ctx context.Context, repositoryID int) (string, bool, error)
 	ListFiles(ctx context.Context, repositoryID int, commit string, pattern *regexp.Regexp) ([]string, error)
 	FileExists(ctx context.Context, repositoryID int, commit, file string) (bool, error)
