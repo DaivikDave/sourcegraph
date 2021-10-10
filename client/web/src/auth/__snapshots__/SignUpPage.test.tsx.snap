@@ -35,7 +35,7 @@ exports[`SignUpPage renders sign up page (cloud) 1`] = `
       <h2
         className="pageHeading"
       >
-        Easily search the code you care about.
+        Easily search the code you care about, for free
       </h2>
     </div>
   </header>
