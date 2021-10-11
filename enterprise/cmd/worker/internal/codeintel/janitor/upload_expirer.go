@@ -171,7 +171,7 @@ func (e *uploadExpirer) handleRepository(
 
 func (e *uploadExpirer) handleUploads(
 	ctx context.Context,
-	commitMap map[string][]policies.Thing,
+	commitMap map[string][]policies.PolicyMatch,
 	uploads []dbstore.Upload,
 	now time.Time,
 ) (err error) {
@@ -221,7 +221,7 @@ func (e *uploadExpirer) handleUploads(
 
 func (e *uploadExpirer) isUploadProtectedByPolicy(
 	ctx context.Context,
-	commitMap map[string][]policies.Thing,
+	commitMap map[string][]policies.PolicyMatch,
 	upload dbstore.Upload,
 	now time.Time,
 ) (bool, error) {
@@ -245,11 +245,11 @@ func (e *uploadExpirer) isUploadProtectedByPolicy(
 		token = nextToken
 
 		for _, commit := range commits {
-			if things, ok := commitMap[commit]; ok {
-				for _, thing := range things {
+			if policyMatches, ok := commitMap[commit]; ok {
+				for _, policyMatch := range policyMatches {
 					// TODO - should be uploaded at instead?
 					// TODO - should filter out things not within time range first
-					if thing.PolicyThinger == nil || now.Sub(*upload.FinishedAt) < *thing.PolicyThinger {
+					if policyMatch.PolicyDuration == nil || now.Sub(*upload.FinishedAt) < *policyMatch.PolicyDuration {
 						return true, nil
 					}
 				}

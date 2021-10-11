@@ -25,9 +25,9 @@ func RetentionExtractor(policy dbstore.ConfigurationPolicy) (maxAge *time.Durati
 
 type Extractor func(policy dbstore.ConfigurationPolicy) (maxAge *time.Duration, includeIntermediateCommits bool)
 
-type Thing struct {
-	Name          string
-	PolicyThinger *time.Duration
+type PolicyMatch struct {
+	Name           string
+	PolicyDuration *time.Duration
 }
 
 // TODO - document
@@ -39,7 +39,7 @@ func CommitsDescribedByPolicy(
 	extractor Extractor,
 	includeTipOfDefaultBranch bool,
 	now time.Time,
-) (map[string][]Thing, error) {
+) (map[string][]PolicyMatch, error) {
 	// if len(policies) == 0 {
 	// TODO - required for incldueTipOfDefaultBranch
 	// 	return nil, nil
@@ -58,7 +58,7 @@ func CommitsDescribedByPolicy(
 		return nil, err
 	}
 
-	commitMap := map[string][]Thing{}
+	commitMap := map[string][]PolicyMatch{}
 	branchRequests := map[string]branchRequestMeta{}
 
 	for commit, refDescriptions := range refDescriptions {
@@ -66,12 +66,12 @@ func CommitsDescribedByPolicy(
 			switch refDescription.Type {
 			case gitserver.RefTypeBranch:
 				if refDescription.IsDefaultBranch && includeTipOfDefaultBranch {
-					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: nil})
+					commitMap[commit] = append(commitMap[commit], PolicyMatch{Name: refDescription.Name, PolicyDuration: nil})
 				}
 
 				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTree, patterns, extractor, now, func(policy dbstore.ConfigurationPolicy) {
 					a, _ := extractor(policy) // TODO - rename
-					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: a})
+					commitMap[commit] = append(commitMap[commit], PolicyMatch{Name: refDescription.Name, PolicyDuration: a})
 
 					// TODO - max age is dependent on upload for retention
 					if maxAge, includeIntermediateCommits := extractor(policy); includeIntermediateCommits {
@@ -82,7 +82,7 @@ func CommitsDescribedByPolicy(
 			case gitserver.RefTypeTag:
 				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, extractor, now, func(policy dbstore.ConfigurationPolicy) {
 					a, _ := extractor(policy) // TODO - rename
-					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: a})
+					commitMap[commit] = append(commitMap[commit], PolicyMatch{Name: refDescription.Name, PolicyDuration: a})
 				})
 			}
 		}
@@ -111,7 +111,7 @@ func CommitsDescribedByPolicy(
 		}
 
 		for _, commit := range commits {
-			commitMap[commit] = append(commitMap[commit], Thing{Name: branchName, PolicyThinger: maxAge})
+			commitMap[commit] = append(commitMap[commit], PolicyMatch{Name: branchName, PolicyDuration: maxAge})
 		}
 	}
 
@@ -126,7 +126,7 @@ func CommitsDescribedByPolicy(
 				return nil, errors.Wrap(err, "gitserver.ResolveRevision")
 			}
 
-			commitMap[string(commit)] = append(commitMap[string(commit)], Thing{Name: policy.Pattern})
+			commitMap[string(commit)] = append(commitMap[string(commit)], PolicyMatch{Name: policy.Pattern})
 		}
 	}
 
