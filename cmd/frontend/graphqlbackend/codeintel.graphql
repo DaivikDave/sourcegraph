@@ -362,16 +362,17 @@ extend type GitBlob {
 }
 
 """
-TODO - document
+A git object that matches a git object type and glob pattern. This type is used by
+the UI to preview what names match a code intelligence policy in a given repository.
 """
 type GitObjectFilterPreview {
     """
-    TODO - document
+    The relevant branch or tag name.
     """
     name: String!
 
     """
-    TODO - document
+    The full 40-char revhash.
     """
     rev: String!
 }
