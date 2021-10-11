@@ -89,7 +89,7 @@ func TestUploadExpirer(t *testing.T) {
 		// Repository 53
 
 		// 1 hour old
-		// covered by catch-all (PROTECTED, younger than 1 day)
+		// covered by commit rule (PROTECTED, younger than 1 day)
 		{ID: 13, RepositoryID: 53, Commit: "deadbeef13", State: "completed", FinishedAt: &t1},
 	}
 
@@ -176,7 +176,7 @@ func TestUploadExpirer(t *testing.T) {
 		53: {
 			dbstore.ConfigurationPolicy{
 				Type:              "GIT_COMMIT",
-				Pattern:           "*",
+				Pattern:           "deadbeef13",
 				RetentionEnabled:  true,
 				RetentionDuration: &d1,
 			},

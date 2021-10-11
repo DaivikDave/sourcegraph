@@ -3,6 +3,7 @@ package policies
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -13,19 +14,20 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
 )
 
-// TODO  - rename, document, export
+// TODO - rename, document, export
 // TODO - for indexing, not retention
-func extractor(policy dbstore.ConfigurationPolicy) (maxAge *time.Duration, includeIntermediateCommits bool) {
+func IndexingExtractor(policy dbstore.ConfigurationPolicy) (maxAge *time.Duration, includeIntermediateCommits bool) {
 	return policy.IndexCommitMaxAge, policy.IndexIntermediateCommits
 }
+func RetentionExtractor(policy dbstore.ConfigurationPolicy) (maxAge *time.Duration, includeIntermediateCommits bool) {
+	return policy.RetentionDuration, policy.RetainIntermediateCommits
+}
 
-// TODO - rename
-// TODO - document
-// TODO - make private
-type SR struct {
-	isDefault bool
-	unbounded bool
-	maxAge    *time.Duration
+type Extractor func(policy dbstore.ConfigurationPolicy) (maxAge *time.Duration, includeIntermediateCommits bool)
+
+type Thing struct {
+	Name          string
+	PolicyThinger *time.Duration
 }
 
 // TODO - document
@@ -34,11 +36,14 @@ func CommitsDescribedByPolicy(
 	gitserverClient GitserverClient,
 	repositoryID int,
 	policies []dbstore.ConfigurationPolicy,
+	extractor Extractor,
 	includeTipOfDefaultBranch bool,
-) (map[string][]string, error) {
-	if len(policies) == 0 {
-		return nil, nil
-	}
+	now time.Time,
+) (map[string][]Thing, error) {
+	// if len(policies) == 0 {
+	// TODO - required for incldueTipOfDefaultBranch
+	// 	return nil, nil
+	// }
 
 	// Get a list of relevant branch and tag heads of this repository
 	refDescriptions, err := gitserverClient.RefDescriptions(ctx, repositoryID)
@@ -53,47 +58,60 @@ func CommitsDescribedByPolicy(
 		return nil, err
 	}
 
-	commitMap := map[string][]string{}
-	branchRequests := map[string]SR{}
+	commitMap := map[string][]Thing{}
+	branchRequests := map[string]branchRequestMeta{}
 
 	for commit, refDescriptions := range refDescriptions {
 		for _, refDescription := range refDescriptions {
 			switch refDescription.Type {
 			case gitserver.RefTypeBranch:
 				if refDescription.IsDefaultBranch && includeTipOfDefaultBranch {
-					commitMap[commit] = append(commitMap[commit], refDescription.Name)
+					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: nil})
 				}
 
-				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTree, patterns, func(policy dbstore.ConfigurationPolicy) {
-					commitMap[commit] = append(commitMap[commit], refDescription.Name)
+				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTree, patterns, extractor, now, func(policy dbstore.ConfigurationPolicy) {
+					a, _ := extractor(policy) // TODO - rename
+					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: a})
 
+					// TODO - max age is dependent on upload for retention
 					if maxAge, includeIntermediateCommits := extractor(policy); includeIntermediateCommits {
 						branchRequests[refDescription.Name] = foldRefDescription(branchRequests[refDescription.Name], refDescription, maxAge)
 					}
 				})
 
 			case gitserver.RefTypeTag:
-				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, func(policy dbstore.ConfigurationPolicy) {
-					commitMap[commit] = append(commitMap[commit], refDescription.Name)
+				forEachMatchingPolicy(policies, refDescription, dbstore.GitObjectTypeTag, patterns, extractor, now, func(policy dbstore.ConfigurationPolicy) {
+					a, _ := extractor(policy) // TODO - rename
+					commitMap[commit] = append(commitMap[commit], Thing{Name: refDescription.Name, PolicyThinger: a})
 				})
 			}
 		}
 	}
 
 	for branchName, x := range branchRequests {
-		var maxAge *time.Time
-		if x.maxAge != nil {
-			t := time.Now().Add(-*x.maxAge)
+		var maxAge *time.Duration
+		// Sort in reverse order
+		sort.Slice(x.maxAges, func(i, j int) bool { return x.maxAges[i] > x.maxAges[j] })
+		if !x.unbounded && len(x.maxAges) > 0 {
+			t := x.maxAges[0]
 			maxAge = &t
 		}
 
-		commits, err := gitserverClient.CommitsUniqueToBranch(ctx, repositoryID, branchName, x.isDefault, maxAge)
+		// HACK HACK HACK
+		var maxAge2 *time.Time
+		if !includeTipOfDefaultBranch && maxAge != nil {
+			t := now.Add(-*maxAge)
+			maxAge2 = &t
+		}
+
+		// TODO - max age is dependent on upload for retention
+		commits, err := gitserverClient.CommitsUniqueToBranch(ctx, repositoryID, branchName, x.isDefault, maxAge2)
 		if err != nil {
 			return nil, errors.Wrap(err, "gitserver.CommitsUniqueToBranch")
 		}
 
 		for _, commit := range commits {
-			commitMap[commit] = append(commitMap[commit], branchName)
+			commitMap[commit] = append(commitMap[commit], Thing{Name: branchName, PolicyThinger: maxAge})
 		}
 	}
 
@@ -108,7 +126,7 @@ func CommitsDescribedByPolicy(
 				return nil, errors.Wrap(err, "gitserver.ResolveRevision")
 			}
 
-			commitMap[string(commit)] = append(commitMap[string(commit)], policy.Pattern)
+			commitMap[string(commit)] = append(commitMap[string(commit)], Thing{Name: policy.Pattern})
 		}
 	}
 
@@ -138,40 +156,65 @@ func compilePatterns(policies []dbstore.ConfigurationPolicy) (map[string]glob.Gl
 }
 
 // TODO - document
-func forEachMatchingPolicy(policies []dbstore.ConfigurationPolicy, refDescription gitserver.RefDescription, targetObjectType dbstore.GitObjectType, patterns map[string]glob.Glob, f func(policy dbstore.ConfigurationPolicy)) {
+func forEachMatchingPolicy(
+	policies []dbstore.ConfigurationPolicy,
+	refDescription gitserver.RefDescription,
+	targetObjectType dbstore.GitObjectType,
+	patterns map[string]glob.Glob,
+	extractor Extractor,
+	now time.Time,
+	f func(policy dbstore.ConfigurationPolicy),
+) {
 	for _, policy := range policies {
-		if policy.Type == targetObjectType && policyMatchesRefDescription(policy, refDescription, patterns) {
+		if policy.Type == targetObjectType && policyMatchesRefDescription(policy, refDescription, patterns, extractor, now) {
 			f(policy)
 		}
 	}
 }
 
 // TODO - document
-func policyMatchesRefDescription(policy dbstore.ConfigurationPolicy, refDescription gitserver.RefDescription, patterns map[string]glob.Glob) bool {
+func policyMatchesRefDescription(
+	policy dbstore.ConfigurationPolicy,
+	refDescription gitserver.RefDescription,
+	patterns map[string]glob.Glob,
+	extractor Extractor,
+	now time.Time,
+) bool {
 	if !patterns[policy.Pattern].Match(refDescription.Name) {
 		// Name doesn't match
 		return false
 	}
 
-	if maxAge, _ := extractor(policy); maxAge != nil && time.Since(refDescription.CreatedDate) > *maxAge {
-		// Too old
-		return false
-	}
+	//
+	// TODO - flag this?
+	//
+
+	// if maxAge, _ := extractor(policy); maxAge != nil { //&& now.Sub(refDescription.CreatedDate) > *maxAge {
+	// fmt.Printf("OLD: %v %v > %v\n", now, now.Sub(refDescription.CreatedDate), maxAge)
+	// 	// Too old
+	// 	return false
+	// }
 
 	return true
 }
 
+type branchRequestMeta struct {
+	isDefault bool
+	unbounded bool
+	maxAges   []time.Duration
+}
+
 // TODO - document
-func foldRefDescription(sr SR, refDescription gitserver.RefDescription, maxAge *time.Duration) SR {
+func foldRefDescription(meta branchRequestMeta, refDescription gitserver.RefDescription, maxAge *time.Duration) branchRequestMeta {
 	if refDescription.IsDefaultBranch {
-		sr.isDefault = true
+		meta.isDefault = true
 	}
 
 	if maxAge == nil {
-		sr.unbounded = true
-	} else if sr.maxAge == nil || *maxAge < *sr.maxAge {
-		sr.maxAge = maxAge
+		meta.unbounded = true
+	} else {
+		meta.maxAges = append(meta.maxAges, *maxAge)
 	}
 
-	return sr
+	return meta
 }

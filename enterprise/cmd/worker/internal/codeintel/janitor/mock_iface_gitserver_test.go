@@ -2,14 +2,20 @@ package janitor
 
 import (
 	"context"
+	"time"
 
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/gitserver"
+	api "github.com/sourcegraph/sourcegraph/internal/api"
 )
 
 // testUploadExpirerMockGitserverClient returns a mock GitserverClient instance that
 // has default behaviors useful for testing the upload expirer.
 func testUploadExpirerMockGitserverClient(branchMap map[string]map[string]string, tagMap map[string][]string) *MockGitserverClient {
 	gitserverClient := NewMockGitserverClient()
+
+	gitserverClient.ResolveRevisionFunc.SetDefaultHook(func(ctx context.Context, repositoryID int, revlike string) (api.CommitID, error) {
+		return api.CommitID(revlike), nil
+	})
 
 	gitserverClient.RefDescriptionsFunc.SetDefaultHook(func(ctx context.Context, repositoryID int) (map[string][]gitserver.RefDescription, error) {
 		refDescriptions := map[string][]gitserver.RefDescription{}
@@ -39,10 +45,11 @@ func testUploadExpirerMockGitserverClient(branchMap map[string]map[string]string
 		return refDescriptions, nil
 	})
 
-	gitserverClient.BranchesContainingFunc.SetDefaultHook(func(ctx context.Context, repositoryID int, commit string) ([]string, error) {
-		var branches []string
-		for branch := range branchMap[commit] {
-			branches = append(branches, branch)
+	gitserverClient.CommitsUniqueToBranchFunc.SetDefaultHook(func(ctx context.Context, repositoryID int, branchName string, isDefaultBranch bool, maxAge *time.Time) (branches []string, _ error) {
+		for commit, branchMap := range branchMap {
+			if _, ok := branchMap[branchName]; ok {
+				branches = append(branches, commit)
+			}
 		}
 
 		return branches, nil

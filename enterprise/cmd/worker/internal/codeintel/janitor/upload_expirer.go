@@ -122,11 +122,12 @@ func (e *uploadExpirer) handleRepository(
 		return errors.Wrap(err, "dbstore.GetConfigurationPolicies")
 	}
 
-	// TODO - redocument
 	// Combine global and repository-specific policies. Note that this resulting slice should never be
 	// empty as we have a pair of protected data retention policies on the global scope so that all data
 	// visible from a tag or branch tip is protected for at least a short amount of time after upload.
-	commitMap, err := policies.CommitsDescribedByPolicy(ctx, e.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...), true)
+	combinedPolicies := append(globalPolicies, repositoryPolicies...)
+
+	commitMap, err := policies.CommitsDescribedByPolicy(ctx, e.gitserverClient, repositoryID, combinedPolicies, policies.RetentionExtractor, true, now)
 	if err != nil {
 		return errors.Wrap(err, "policies.CommitsDescribedByPolicy")
 	}
@@ -170,7 +171,7 @@ func (e *uploadExpirer) handleRepository(
 
 func (e *uploadExpirer) handleUploads(
 	ctx context.Context,
-	commitMap map[string][]string,
+	commitMap map[string][]policies.Thing,
 	uploads []dbstore.Upload,
 	now time.Time,
 ) (err error) {
@@ -220,7 +221,7 @@ func (e *uploadExpirer) handleUploads(
 
 func (e *uploadExpirer) isUploadProtectedByPolicy(
 	ctx context.Context,
-	commitMap map[string][]string,
+	commitMap map[string][]policies.Thing,
 	upload dbstore.Upload,
 	now time.Time,
 ) (bool, error) {
@@ -244,8 +245,14 @@ func (e *uploadExpirer) isUploadProtectedByPolicy(
 		token = nextToken
 
 		for _, commit := range commits {
-			if _, ok := commitMap[commit]; ok {
-				return true, nil
+			if things, ok := commitMap[commit]; ok {
+				for _, thing := range things {
+					// TODO - should be uploaded at instead?
+					// TODO - should filter out things not within time range first
+					if thing.PolicyThinger == nil || now.Sub(*upload.FinishedAt) < *thing.PolicyThinger {
+						return true, nil
+					}
+				}
 			}
 		}
 	}

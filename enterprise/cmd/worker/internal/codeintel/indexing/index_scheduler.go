@@ -96,8 +96,10 @@ func (s *IndexScheduler) Handle(ctx context.Context) error {
 			return errors.Wrap(err, "dbstore.GetConfigurationPolicies")
 		}
 
+		combinedPolicies := append(globalPolicies, repositoryPolicies...)
+
 		// Determine the set of commits that should be reliably indexed for this repository
-		commitMap, err := policies.CommitsDescribedByPolicy(ctx, s.gitserverClient, repositoryID, append(globalPolicies, repositoryPolicies...), false)
+		commitMap, err := policies.CommitsDescribedByPolicy(ctx, s.gitserverClient, repositoryID, combinedPolicies, policies.IndexingExtractor, false, time.Now())
 		if err != nil {
 			return errors.Wrap(err, "policies.CommitsDescribedByPolicy")
 		}

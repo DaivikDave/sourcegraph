@@ -224,5 +224,5 @@ func (r *resolver) UpdateIndexConfigurationByRepositoryID(ctx context.Context, r
 }
 
 func (r *resolver) PreviewGitObjectFilter(ctx context.Context, repositoryID int, gitObjectType dbstore.GitObjectType, pattern string) (map[string][]string, error) {
-	return policies.CommitsDescribedByPolicy(ctx, r.gitserverClient, repositoryID, []dbstore.ConfigurationPolicy{{Type: gitObjectType, Pattern: pattern}}, false)
+	return policies.CommitsDescribedByPolicy(ctx, r.gitserverClient, repositoryID, []dbstore.ConfigurationPolicy{{Type: gitObjectType, Pattern: pattern}}, nil, false, time.Now())
 }
